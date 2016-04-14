@@ -1,0 +1,29 @@
+{
+  "favicon": "/image/favicon.ico",
+  "sections": [
+    {"section": "title"},
+    {"section": "do_the_math"},
+    {"section": "experiment_rails"},
+    {"section": "experiment_rails_2"},
+    {"section": "strategy"},
+    {"section": "ignore"},
+    {"section": "instant"},
+    {"section": "perspective"},
+    {"section": "relative"},
+    {"section": "relative_2"},
+    {"section": "relative_3"},
+    {"section": "wrap_everything"},
+    {"section": "output"},
+    {"section": "input"},
+    {"section": "input_2"},
+    {"section": "slicing"},
+    {"section": "postgres"},
+    {"section": "postgres_2"},
+    {"section": "experiment_postgres"},
+    {"section": "experiment_postgres_2"},
+    {"section": "experiment_postgres_3"},
+    {"section": "postgres_grouping"},
+    {"section": "postgres_grouping_2"},
+    {"section": "bibliography"}
+  ]
+}

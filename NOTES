@@ -1,0 +1,537 @@
+# Title
+
+Hi, I'm Paul Jungwirth.
+I do freelance development and consulting here in Portland as Illuminated Computing.
+I'm also a member of a DevOps consulting firm called Columbia Ops.
+
+Are you afraid of timezones? I used to be. I would dread having to deal with them.
+But they are just like any other code:
+We aren't biologists or physicists: in programming there are no mysteries.
+You can always figure out what's going on,
+sometimes it just takes a little work.
+
+So tonight I want to mostly give advice
+and share my own approach to handling time zones.
+There are lots of blog posts going over useful time-related methods in Rails.
+I will get into details like that too,
+but I want to be more strategic also,
+and give you some principles that will make timezones easier to handle
+and easier to reason about.
+
+Before I begin,
+this talk is based on a blog post I wrote a couple years ago,
+but my blog is pretty obscure, you probably haven't heard of it,
+and anyway there is a little added material,
+so hopefully no one will be bored.
+
+Also, you can find a working Rails application with various RSpec tests
+on Github: (give the link)
+Some of those RSpec tests do the frowned-upon thing of "testing the framework",
+not testing my own code,
+but they are there just to demonstrate how timezones work in Rails.
+
+
+
+# Don't Guess, Do the Math!
+
+First of all,
+I encourage you to play around with timezones until you're comfortable with them.
+The Rails console is a REPL. Psql is a REPL. The mysql client is a REPL.
+Just make some quick one-line experiments if you aren't sure about things.
+
+There is a pattern in programming I see a lot,
+especially in debugging.
+I call it programming by superstition.
+It's like you just guess,
+instead of understanding what's happening.
+
+So how do you understand?
+First, you reason about it, step by step.
+For each method call, what goes in, and what comes out?
+Second, if you don't know how a method behaves,
+experiment! With a REPL it's so easy.
+Third, write a test for it!
+
+
+
+# Experiment: Rails
+
+What day is it?
+  
+    2.2.3 :001 > t = Time.zone.now
+     => Wed, 30 Mar 2016 03:34:45 UTC +00:00 
+
+    2.2.3 :002 > t.in_time_zone("America/Los_Angeles")
+     => Tue, 29 Mar 2016 20:34:45 PDT -07:00 
+
+    2.2.3 :003 > t.to_date
+     => Wed, 30 Mar 2016 
+
+    2.2.3 :004 > t.in_time_zone("America/Los_Angeles").to_date
+     => Tue, 29 Mar 2016 
+
+
+
+- Experiment: Rails 2
+
+What have we got?
+  
+    2.2.3 :017 > Time.now
+     => 2016-03-29 21:19:11 -0700 
+
+    2.2.3 :018 > Time.zone.now
+     => Wed, 30 Mar 2016 04:19:13 UTC +00:00 
+
+    2.2.3 :019 > Time.now.class
+     => Time 
+
+    2.2.3 :020 > Time.zone.now.class
+     => ActiveSupport::TimeWithZone 
+
+    2.2.3 :021 > Time.zone.now.public_methods.sort
+     => [:!, :!=, :!~, :+, :-, :<, :<=, :<=>, :==, :===, :=~, :>, :>=, ...
+
+
+
+# Overall Strategy: Handle time zones as little as possible!
+
+- When you parse a user input, it's probably expressed in their time zone.
+- When you format a time for output, express it in the user's time zone.
+- When you assign times to days, timezone matters.
+
+This happens so often in programming:
+the better you understand something,
+the more concisely and effortlessly you can do it.
+Beginners always write more code than they need to.
+I'm not talking about Ruby golf,
+I'm talking about useless flailing around,
+like converting from an array to a hash to a set back to an array,
+or whatever.
+I'm sure you've all seen what I'm getting at.
+And for some reason time zones seem to elicit this behavior
+even from experienced programmers.
+
+So if anything, worrying about time zones is a red flag.
+Somewhere I came across some advice for C programming
+about Endianness: if you're thinking about Endianness,
+watch out, you are probably trying to hard.
+Actually Endianness is a lot like time zones:
+you worry about it networking,
+when things go in and when things go out,
+and otherwise it's invisible.
+
+- System time is UTC.
+  - But probably not on your development machine....
+- Rails time is UTC.
+- Database time is UTC.
+
+- No offsets
+- No Daylight Savings Time
+
+- All our math can be on Time (or TimeWithZone) objects, for instance adding a day.
+  No need to refer to time zones.
+  
+
+
+# Otherwise, ignore timezones:
+
+Here are some examples of trying too hard from Stack Overflow:
+
+[trying-too-hard picture]
+
+I spent about two weeks watching Stack Overflow and answering questions about Rails and Postgres,
+and I saw timezone questions almost every day,
+and usually they had tons of wrong answers.
+This example at least produces the right result,
+even if it has some pointless method calls thrown in.
+
+So if we want to avoid this flailing,
+we need a way to think about time zones accurately.
+What's our mental model?
+
+
+
+# Remember it's just an instant
+
+To me the most powerful idea is simply to remind myself
+that it's only an instant.
+
+Take this moment. When is it?
+In Portland we call it 8 o'clock.
+The people in New York are experiencing the same instant,
+but they call it 11 o'clock.
+But it's the same instant.
+
+Programming is the same way.
+If you have a `Time` 
+it's just an instant.
+If you have a `TimeWithZone`,
+it's *still* just an instant,
+except you have a bit of metadata that tells you how to stingify it.
+But either way, you don't have a string: you have an instant.
+
+In Unix it's common to represent times as seconds since "The Epoch",
+which is UTC midnight January 1st, 1970.
+I find it's really helpful to assume that's how times are stored internally by every system:
+a Ruby `Time`, a Rails `TimeWithZone`,
+a Postgres timestamp, etc.
+Sometimes you have millisecond resolution, sometimes microsecond,
+maybe even nanosecond.
+But the resolution isn't essential.
+Sometimes you have 32 bits, sometimes 64, but whatever.
+The point is what you have is just a number.
+It's not a string anymore.
+It's an instant.
+The timezone is just a perspective.
+It's something you'd use to render a string, but that's it.
+
+Also I always think of these "instants" as UTC.
+I guess that's approximately true,
+since the Epoch is UTC.
+Maybe it's truer to think of them as timezone-less.
+But UTC is good enough.
+Imagine that internally times are always treated as UTC.
+
+This goes along with our principle of not guessing.
+Reason through the steps:
+what goes in, what comes out?
+Did the instant change?
+Or just the perspective?
+
+
+
+# Whose perspective?
+
+First get a timezone object. There is a big hash of them.
+Note that you should use keys that don't imply DST or non-DST.
+Also, use real TimeZone objects, not just offsets.
+
+Once you have the perspective, you can use it to parse a string or format a time for output.
+Also there is a handy class `TimeWithZone` that is an instant
+plus a bit of metadata: the time zone or perspective---where are you standing at that instant?
+
+    tz = ActiveSupport::TimeZone['America/Los_Angeles']
+    tz.parse("08:34")
+    t.in_time_zone(tz).strftime("%H:%M:%S")
+
+You can also get a TimeZone object by saying 
+
+    tz = Time.zone     # Should be UTC!
+
+but that should be UTC, so who cares?
+
+Note that `in_time_zone` does not actually change the instant, but only the perspective.
+
+
+
+# Everything is relative:
+
+Good advice?
+
+    Time.now       # system time zone AVOID!
+    Time.zone.now  # Rails time zone: BETTER!
+
+- Both give you the same instant!
+- Both ignore "everything is relative"
+
+      current_user.time_zone   # User time zone: BEST!
+
+So what is the perspective you want to use?
+The user's time zone?
+The user's company's time zone?
+It could be lots of things.
+If your app manages apartments,
+maybe you want to show times local to the apartmet,
+regardless of the user's time zone.
+But there is usually a perspective.
+
+If you haven't implemented the time zone preferences yet,
+you can still stub out a method,
+so that you can use it in the rest of your app:
+
+    class User
+      def time_zone
+        # Placeholder until we have real time zone support:
+        ActiveSupport::TimeZone['America/Los_Angeles']
+      end
+    end
+
+
+
+# Sometimes one global perspective is okay:
+
+![Stack Overflow badges picture](badges.png)
+
+Stack Overflow has this badge, where if you visit the site every day for 100 days, you get it.
+I actually had a really good run leading up to this talk,
+but then I spent a Saturday hiking with my family, and it went back to zero.
+But they had to decide, How do we slice up the timeline into days?
+When does a day start and end?
+Is it based on the user's timezone?
+They just chose UTC.
+
+
+
+# Wrap everything?
+
+Okay so you want to apply a perspective all the time.
+
+You've probably seen this advice:
+
+    class ApplicationController < ActionController::Base
+
+      around_filter :with_time_zone, if: :current_user
+
+      def with_time_zone(&block)
+        Time.use_zone(current_user.time_zone, &block)
+      end
+
+    end
+
+Now every request get a perspective.
+
+Personally I don't love this pattern.
+It's too much like a global variable,
+and putting it in the controller makes my model tests less realistic.
+I'd rather be explicit and reference a timezone whenever I need it.
+And that's not often if you're following our general strategy.
+
+Also `use_zone` doesn't actually change the behavior of everything.
+For instance this is a bug:
+
+    Time.use_zone(tz) { Time.strptime("2016-03-29 03:15", "%Y-%m-%d %H:%M") }
+
+That's because `Time.strptime` doesn't look at `Time.zone`.
+It's a Ruby method, not a Rails method.
+
+
+
+# Outputting/Formatting
+
+Easy!
+
+Just get a `TimeWithZone`, and then it has that extra bit of metadata, that perspective,
+so it knows how to stringify itself.
+
+    t = Time.now    # just to be bad
+    t.in_time_zone("America/Los_Angeles").strftime("%H:%m")
+    t.in_time_zone("America/New_York").strftime("%H:%m")
+
+
+
+# Parsing
+
+Parsing is tricker.
+For this I see bad advice on Stack Overflow all the time.
+Why doesn't this work?
+Do the math: think it though step by step.
+Once we parse it, we've already interpreted the string and picked the instant.
+Calling `in_time_zone` doesn't change the instant, just the perspective.
+
+In any Rails:
+
+    tz.parse("01:18:14")    # watch out for 12/25/2016 vs 25/12/2016
+
+Or in Rails 5:
+
+    tz.strptime("01:18:14", "%H:%M:%S")
+
+By me! :-)
+
+
+
+
+# Slicing
+
+    t.in_time_zone(tz).to_date
+
+But:
+- store datetimes, not just dates, and not just times.
+- for boundaries, it's better to retain full resolution:
+
+      t.in_time_zone(tz).end_of_day
+      t.in_time_zone(tz).beginning_of_day   # aka midnight
+
+But often slicing happens in your database,
+e.g. with a `GROUP BY`.
+
+
+
+
+# Timezones in the database (Postgres)
+
+So Postgres knows about time zones.
+
+  - pg_timezone_names
+    - name
+    - abbrev
+    - utc_offset
+    - is_dst
+
+The names in this table mostly match up to the names in Rails.
+Rails has some additional ones though,
+so I would try to stick to the ones they have in common.
+That's why I'm risking your ire by continuously talking about Los Angeles.
+That's the name Postgres knows about.
+
+Note that this table is actually a view,
+and it's a little magical.
+The only column that doesn't change is `name`.
+The others, `abbrev`, `utc_offset`, and `is_dst`,
+all change based on the present moment.
+So right now `America/Los_Angeles` is `PDT`, -7 hours, and DST.
+But a few months ago it was `PST`, -8, and no DST.
+So watch out how you use this.
+I would not try to do lookups based on the abbreviation.
+Also by the way the abbreviations are not unique---not a natural key to use the database lingo.
+
+
+
+# timestamp vs timestamptz
+
+- Postgres has two column types:
+
+    TIMESTAMP WITH TIME ZONE
+    TIMESTAMP WITHOUT TIME ZONE
+
+    timestamp
+    timestamptz
+
+- Some people have strong opinions on which one you should use.
+- Rails uses timestamp.
+- Database people pretty much all say we're doing it wrong.
+- Is your database a dumb store, with Rails a gatekeeper,
+  or do lots of applications share the database,
+  and the database enforces the "business logic"?
+- Not going to argue one or another here.
+
+- So what's the difference?
+- One common misconception: neither column type actually stores the timezone!
+- timestamptz just means that when converting to/from a string, we use the current TIMEZONE setting.
+- timestamp always assumes UTC for parsing/formatting.
+
+- So Rails always uses timestamp,
+  but therefore it always takes care of formatting dates as UTC when passing them to the database.
+  If you are constructing strings yourself, watch out!
+
+
+
+# Experiment: Postgres
+
+A lot of experiments you can do right in the REPL.
+For instance, how does the timezone setting effect output?
+
+    SET TIMEZONE='America/Los_Angeles'; SELECT NOW();
+    SET TIMEZONE='America/Chicago'; SELECT NOW();
+
+And what is the difference between timestamp and timestamptz?:
+
+    SELECT '2016-04-04 20:45'::timestamptz;
+    SELECT '2016-04-04 20:45'::timestamp;
+    SELECT '2016-04-04 20:45 PDT'::timestamptz;
+    SELECT '2016-04-04 20:45 PDT'::timestamp;
+
+What happens if I include a timezone in a timestamp without time zone?
+
+
+
+# Experiment: Postgres 2
+
+For other experiments you might need to make a quick throwaway table and try things out.
+For instance insert data with some time zones, pull it out again with some time zones.
+There's a lot of detail here, so you should reproduce this experiment at home.
+But note that `d1` always gives us whatever we put in: 22, 02, 16.
+
+But `d2` is working harder.
+It was interpreting our strings,
+so it knows that 22/02/16 in UTC is different than 22/02/16 in Pacific Time.
+When we output them, we get the correct values (but all shown in Pacific Time). 
+
+Go do your own experiments!
+For instance, what happens when you cast between timestamp and timestamptz?
+Does the timezone setting matter?
+
+
+
+# Postgres: GROUP BY
+
+So back to slicing.
+Often we do this for reports,
+and it happens in SQL instead of in Rails.
+For instance, imagine a report on daily sales,
+that gives our total revenue for each day.
+There was this sale at 6:30 p.m. Pacific Time, on Wednesday.
+When we run our report, will that be Wednesday or Thursday?
+
+If we run our report as UTC, it will be Thursday?
+Note that here on the West Coast,
+UTC changes days at 4 or 5 p.m., depending on whether we're in Daylight Savings Time.
+Have you ever been working on a feature,
+and finally right around 5 o'clock it's all ready,
+and you run your tests one more time so you can get out the door,
+and suddenly there are failures everywhere?
+Stuff you didn't even touch?
+That means you test suite, and maybe your code, has timezone problems.
+You're slicing up days as UTC.
+
+If you want to GROUP BY days, you have a similar issue.
+Assuming you're running your Postgres with a timezone of UTC,
+you use the `AT TIME ZONE` to make the grouping happen how you want.
+This is a weird SQL operation that is like a flipflop:
+you give it a timestamp, it gives you a timestamptz.
+You give it a timestamptz, it gives you a timestamp.
+(This is a great topic for experimenting by the way.)
+
+So here we are going from timestamp to timestamptz back to timestamp.
+The first operation says "interpret this as a UTC time",
+which is right, because that's how Rails stores times.
+The second operation says "express this in Pacific Time".
+It doesn't change the instant, but it gives us the perspective for `date_trunc` to do the right thing.
+Incidentally, it's important here that a timestamp is not actually "seconds since the epoch",
+but a struct with hours/minutes/etc.
+
+Also by the way, note how we're using `date_trunc`, which returns a timestamp,
+rather than `extract`. I think this is easier to deal with:
+it's more general, it lets you use normal date formatting methods,
+and it avoid bugs with multiple levels of comparison.
+(Also beware of extract(year) + extract(week)! Use extract(isoyear) instead.)
+
+Now suppose you want to break this down by sales office too.
+On Monday, did the New York office sell more than Chicago?
+Well you should have a `sales_offices.time_zone` column,
+and name you can use that in place of your hardcoded `America/Los_Angeles`.
+
+
+
+
+# More
+
+- Mistakes
+  - Don't use numeric offsets, use names.
+  - Don't use DST-dependent names (e.g. PDT, PST), use the zone name (e.g. "America/Los_Angeles", or "Pacific Time (US & Canada)")
+  - Don't truncate to a date, use midnight instead.
+  - Don't use just date columns. Don't use just time columns either!
+
+- Writing tests
+  - They all fail after 5:00
+  - Delorean
+
+- timezone failures after 5:00
+
+
+- Caveats: store the user's input string too?
+
+
+
+# Bibliography
+
+http://danilenko.org/2012/7/6/rails_timezones/
+http://rails-bestpractices.com/posts/2014/10/22/use-time-zone-now-instead-of-time-now/
+http://winstonyw.com/2014/03/03/time_now_vs_time_zone_now/
+http://brendankemp.com/essays/dealing-with-time-zones-using-rails-and-postgres/
+http://stackoverflow.com/questions/9571392/ignoring-timezones-altogether-in-rails-and-postgresql
+http://justatheory.com/computers/databases/postgresql/use-timestamptz.html
+http://dba.stackexchange.com/questions/59006/what-is-a-valid-use-case-for-using-timestamp-without-time-zone
+
+
+
